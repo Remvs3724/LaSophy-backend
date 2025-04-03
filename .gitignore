@@ -11,5 +11,4 @@ mapCover/
 Mapdb/
 *.db
 *.sqlite3
-firebase-upload/
 
