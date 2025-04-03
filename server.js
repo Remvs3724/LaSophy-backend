@@ -722,6 +722,7 @@ app.get('/logout', (req, res, next)=>{
     res.json({ success: true, message: "Logged out successfully" });
 
 })
-app.listen(port, ()=>{
-    console.log('server listening on port', port)
+ const PORT = process.env.PORT || 5001;
+app.listen(PORT, ()=>{
+    console.log(`server listening on ${PORT}`, PORT)
 })
