@@ -1,0 +1,13 @@
+# dependencies
+/node_modules
+PDFdb/
+imgCover/
+temMapCover/
+temIMG/
+temMap/
+temPDF/
+themeCover/
+mapCover/
+Mapdb/
+*.db
+*.sqlite3
