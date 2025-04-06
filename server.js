@@ -1,7 +1,8 @@
 
 const express=require('express')
+const bucket = require('./firebase');
 require('dotenv').config();
-const fs = require("node:fs");
+const fs = require("node:fs/promises");
 const sharp = require('sharp');
 const multer = require("multer");
 const path=require('node:path')
@@ -13,19 +14,13 @@ const { v4: uuidv4 } = require("uuid");
 const { register } = require('node:module');
 const db=new Database('./LaSophy.db')
 const app=express()
-const port=5001
 const uniqueId = uuidv4();
 app.use(cors({
-    origin: "http://localhost:3000", // Your frontend URL
-    credentials: true // Allow cookies
+    origin: ["http://localhost:3000","https://la-sophy-my-project.vercel.app"], 
+    credentials: true 
 }
 
 ));
-//app.use(express.static(path.join(__dirname, 'frontend/build')));
-
-//app.get('*', (req, res) => {
-//res.sendFile(path.join(__dirname, 'frontend/build', 'index.html'));
-//});
 app.use("/PDFdb", express.static(path.join(__dirname, "PDFdb")));
 app.use("/imgCover", express.static(path.join(__dirname, "imgCover")));
 app.use("/themeCover",express.static(path.join(__dirname, "themeCover")));
@@ -35,50 +30,14 @@ app.use(express.urlencoded({extended:true}))
 //解析解密cook
 app.use(cookieParser('LaSophy3724'))
 // make sure the difference between req.cookies: not signed, req.signedCookies: signed
+//for bookcover
 
-const pdfStoragePath = "/Users/elirem/Desktop/LaSophy_project/my_app/backend/PDFdb";
-const pdfstorage = multer.diskStorage({
-    destination: function (req, file, cb) {
-      cb(null, "./temPDF"); // Store file in PDFdb
-    },
-    filename: function (req, file, cb) {
-      cb(null, file.originalname); // Keep original file name
-    },
-  });
-  const pdfupload = multer({ storage: pdfstorage});
-  
-  const imgStoragePath = "/Users/elirem/Desktop/LaSophy_project/my_app/backend/imgCover";
-  const imgstorage = multer.diskStorage({
-      destination: function (req, file, cb) {
-        cb(null, "./temIMG"); // Store file in PDFdb
-      },
-      filename: function (req, file, cb) {
-        cb(null, file.originalname); // Keep original file name
-      },
-    });
-    const imgupload = multer({ storage: imgstorage });
+// Storage
+  const pdfupload = multer({ storage: multer.memoryStorage() });
+  const imgupload = multer({ storage: multer.memoryStorage() });
+  const mapupload=multer({ storage: multer.memoryStorage() });
+  const mapcoverupload=multer({ storage: multer.memoryStorage()});
 
-    const mapStoragePath="/Users/elirem/Desktop/LaSophy_project/my_app/backend/Mapdb"
-    
-    const mapstorage=multer.diskStorage({
-        destination: function (req, file, cb) {
-            cb(null, "./temMap"); 
-          },
-          filename: function (req, file, cb) {
-            cb(null, file.originalname); 
-          },
-    })
-    const mapupload=multer({storage: mapstorage})
-const mapCoverStoragePath="/Users/elirem/Desktop/LaSophy_project/my_app/backend/mapCover"
-const mapcoverstorage=multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, "./temMapCover"); 
-      },
-      filename: function (req, file, cb) {
-        cb(null, file.originalname); 
-      },
-})
-const mapcoverupload=multer({storage: mapcoverstorage})
 
 app.use((req, res, next)=>{
     const userId = req.signedCookies.loginUser;
@@ -94,15 +53,18 @@ app.use((req, res, next)=>{
     res.locals.isLogin=!!user//public information, i don't need to 
     next()
 })
-app.get('/api/books',(req, res, next)=>{
+app.get('/api/books', async (req, res, next)=>{
+  try{
     const books=db.prepare("SELECT * FROM books").all()
-    if(!books){
-        return res.json({message: 'Database error'})
-    }
-    else{
-        return res.json(books)
-    }
+    res.json(books);
+  }catch(err){
+    console.error('Error fetching books:', err);
+    res.status(500).json({ message: 'Server error' });
+  
+
+  }
 })
+
 app.get('/PDFreader/:pdf_path', (req,res,next)=>{
     try {
         let collect_or_not=false
@@ -145,12 +107,6 @@ app.get('/', (req, res ,next) => {
     if (!req.signedCookies.loginUser){
         return res.json({ loginOrnot: res.locals.isLogin, currentUser: res.locals.loginUser});
     } 
-    /*
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(req.signedCookies.loginUser);
-    if (!user) {
-        return res.json({ isLogin: false, loginUser: null });
-    }
-    */
     res.json({ loginOrnot: res.locals.isLogin, currentUser: res.locals.loginUser});
 });
 
@@ -346,24 +302,36 @@ app.post('/upload/map',(req,res,next)=>{
         if (!req.file){
             return res.status(400).json({message:"No map uploaded"})
         }
-        const temPath=req.file.path
-        const finalPath = path.join(mapStoragePath, req.file.originalname);
-        if (fs.existsSync(finalPath)) {
-            return res.status(409).json({
+        const originalName = req.file.originalname;
+          const mimetype = req.file.mimetype;
+          const fileBuffer = req.file.buffer;
+
+          const tempPath = `temMap/${originalName}`;
+          const finalPath = `Mapdb/${originalName}`;
+          try{
+            const tempFile = bucket.file(tempPath);
+            await tempFile.save(fileBuffer, {
+              metadata: { contentType: mimetype },
+            });
+            const finalFile = bucket.file(finalPath);
+            const [exists] = await finalFile.exists();
+            if (exists) {
+              await tempFile.delete();
+              return res.status(409).json({
                 message: "Map already exists",
-                filename: req.file.originalname
+                filename: originalName,
               });
             }
-         try{
-                fs.renameSync(temPath, finalPath);
-                return res.status(200).json({
-                  message: "Map uploaded",
-                  original: req.file.originalname,
-                });
-            } catch(error){
-                console.error("❌ Error moving file:", error);
-                return res.status(500).json({ message: "Failed to save map" });
-            }
+            await tempFile.copy(finalFile);
+            await tempFile.delete();
+            return res.status(200).json({
+              message: "File uploaded successfully",
+              filename: originalName
+            });
+          } catch (moveErr) {
+            console.error("❌ Error moving file:", moveErr);
+            return res.status(500).json({ message: "Failed to save file" });
+          }
     
     })
 
@@ -414,24 +382,36 @@ app.post('/upload/map_cover', (req,res,next)=>{
         if (!req.file){
             return res.status(400).json({message:"No map cover uploaded"})
         }
-        const temPath=req.file.path
-        const finalPath = path.join(mapCoverStoragePath, req.file.originalname);
-        if (fs.existsSync(finalPath)) {
-            return res.status(409).json({
-                message: "Map cover already exists",
-                filename: req.file.originalname
+        const originalName = req.file.originalname;
+          const mimetype = req.file.mimetype;
+          const fileBuffer = req.file.buffer;
+
+          const tempPath = `temMapCover/${originalName}`;
+          const finalPath = `mapCover/${originalName}`;
+          try{
+            const tempFile = bucket.file(tempPath);
+            await tempFile.save(fileBuffer, {
+              metadata: { contentType: mimetype },
+            });
+            const finalFile = bucket.file(finalPath);
+            const [exists] = await finalFile.exists();
+            if (exists) {
+              await tempFile.delete();
+              return res.status(409).json({
+                message: "Mapcover already exists",
+                filename: originalName,
               });
             }
-         try{
-                fs.renameSync(temPath, finalPath);
-                return res.status(200).json({
-                  message: "Map cover uploaded",
-                  original: req.file.originalname,
-                });
-            } catch(error){
-                console.error("❌ Error moving file:", error);
-                return res.status(500).json({ message: "Failed to save map" });
-            }
+            await tempFile.copy(finalFile);
+            await tempFile.delete();
+            return res.status(200).json({
+              message: "File uploaded successfully",
+              filename: originalName
+            });
+          } catch (moveErr) {
+            console.error("❌ Error moving file:", moveErr);
+            return res.status(500).json({ message: "Failed to save file" });
+          }
     
     })
 
@@ -440,8 +420,7 @@ app.post('/upload/map_cover', (req,res,next)=>{
 
 
 app.post('/upload/img',  (req, res, next)=>{
-    imgupload.single("cover")(req, res, function (err) {
-
+    imgupload.single("cover")(req, res, async function (err) {
         if (err) {
             return res.status(500).json({message: "Upload failed"});
           
@@ -450,28 +429,36 @@ app.post('/upload/img',  (req, res, next)=>{
         if (!req.file) {
             return res.status(400).json({message: "No img uploaded"});
           }
-          const tempPath = req.file.path; 
-          const finalPath = path.join(imgStoragePath, req.file.originalname);
-          if (fs.existsSync(finalPath)) {
-            fs.unlinkSync(tempPath); 
-            return res.status(409).json({
-              message: "Img already exists",
-              filename: req.file.originalname
+          const originalName = req.file.originalname;
+          const mimetype = req.file.mimetype;
+          const fileBuffer = req.file.buffer;
+
+          const tempPath = `temIMG/${originalName}`;
+          const finalPath = `imgCover/${originalName}`;
+          try{
+            const tempFile = bucket.file(tempPath);
+            await tempFile.save(fileBuffer, {
+              metadata: { contentType: mimetype },
             });
-          }
-    
-          try {
-            fs.renameSync(tempPath, finalPath);
+            const finalFile = bucket.file(finalPath);
+            const [exists] = await finalFile.exists();
+            if (exists) {
+              await tempFile.delete();
+              return res.status(409).json({
+                message: "Img already exists",
+                filename: originalName,
+              });
+            }
+            await tempFile.copy(finalFile);
+            await tempFile.delete();
             return res.status(200).json({
-              message: "Img uploaded successfully",
-              filename: req.file.originalname
+              message: "File uploaded successfully",
+              filename: originalName
             });
           } catch (moveErr) {
             console.error("❌ Error moving file:", moveErr);
-            return res.status(500).json({ message: "Failed to save img" });
+            return res.status(500).json({ message: "Failed to save file" });
           }
-
-        
       });
 
     
@@ -479,7 +466,7 @@ app.post('/upload/img',  (req, res, next)=>{
 })
 
 app.post('/upload/pdf',  (req, res, next)=>{
-    pdfupload.single("file")(req, res, function (err) {
+    pdfupload.single("file")(req, res, async function (err) {
 
         if (err) {
             console.log("now data looks like", req.body)
@@ -492,28 +479,36 @@ app.post('/upload/pdf',  (req, res, next)=>{
             return res.status(400).json({message: "No file uploaded"});
           }
           
-          const tempPath = req.file.path; 
-          const finalPath = path.join(pdfStoragePath, req.file.originalname);
-          if (fs.existsSync(finalPath)) {
-            fs.unlinkSync(tempPath); 
-            return res.status(409).json({
-              message: "Book already exists",
-              filename: req.file.originalname
+          const originalName = req.file.originalname;
+          const mimetype = req.file.mimetype;
+          const fileBuffer = req.file.buffer;
+
+          const tempPath = `temPDF/${originalName}`;
+          const finalPath = `PDFdb/${originalName}`;
+          try{
+            const tempFile = bucket.file(tempPath);
+            await tempFile.save(fileBuffer, {
+              metadata: { contentType: mimetype },
             });
-          }
-    
-          try {
-            fs.renameSync(tempPath, finalPath);
+            const finalFile = bucket.file(finalPath);
+            const [exists] = await finalFile.exists();
+            if (exists) {
+              await tempFile.delete();
+              return res.status(409).json({
+                message: "Book already exists",
+                filename: originalName,
+              });
+            }
+            await tempFile.copy(finalFile);
+            await tempFile.delete();
             return res.status(200).json({
               message: "File uploaded successfully",
-              filename: req.file.originalname
+              filename: originalName
             });
           } catch (moveErr) {
             console.error("❌ Error moving file:", moveErr);
             return res.status(500).json({ message: "Failed to save file" });
           }
-
-        
       });
 
     
