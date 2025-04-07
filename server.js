@@ -1,6 +1,6 @@
 
 const express=require('express')
-const bucket = require('./firebase');
+const {bucket} = require('./firebase');
 require('dotenv').config();
 const fs = require("node:fs/promises");
 const sharp = require('sharp');
