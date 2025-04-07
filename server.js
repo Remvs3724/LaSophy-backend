@@ -61,7 +61,6 @@ app.get('/api/books', async (req, res, next)=>{
     console.error('Error fetching books:', err);
     res.status(500).json({ message: 'Server error' });
   
-
   }
 })
 
@@ -630,14 +629,14 @@ app.post('/login',(req, res, next)=>{
         maxAge:86400 * 1000,
         httpOnly: true, // Prevents client-side access
         secure: process.env.NODE_ENV === 'production', // Ensures cookie is sent over HTTPS in production
-        sameSite: 'lax' // Allows sending cookies when navigating from another site
+        sameSite: 'none' // Allows sending cookies when navigating from another site
     });
     res.cookie('userType', isAdmin ? 'admin' : 'user', {
         signed: true,
         maxAge: 86400 * 1000,
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax'
+        sameSite: 'none'
       });
     res.json({ message: 'Login successful'});
 
