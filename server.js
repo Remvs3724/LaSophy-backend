@@ -16,7 +16,7 @@ const db=new Database('./LaSophy.db')
 const app=express()
 const uniqueId = uuidv4();
 app.use(cors({
-    origin: ["http://localhost:3000","https://la-sophy-my-project.vercel.app"], 
+    origin: ["https://la-sophy-my-project.vercel.app"], 
     credentials: true 
 }
 
@@ -472,7 +472,6 @@ app.post('/upload/pdf',  (req, res, next)=>{
             return res.status(500).json({message: "Upload failed"});
           
         }
-
         if (!req.file) {
             console.warn("⚠️ No file uploaded");
             return res.status(400).json({message: "No file uploaded"});
